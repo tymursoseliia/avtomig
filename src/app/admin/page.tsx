@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import Link from 'next/link';
 import { X, Upload, LogOut, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -38,6 +39,8 @@ export default function AdminPage() {
   // Cars management state
   const [cars, setCars] = useState<Car[]>([]);
   const [loadingCars, setLoadingCars] = useState(false);
+  const [editingCar, setEditingCar] = useState<Car | null>(null);
+  const [updatingCar, setUpdatingCar] = useState(false);
 
   // Video reviews state
   const [videoReviews, setVideoReviews] = useState<VideoReview[]>([]);
@@ -305,6 +308,42 @@ export default function AdminPage() {
       const errorMessage = error instanceof Error ? error.message : 'Неизвестная ошибка';
       alert('Ошибка: ' + errorMessage);
       console.error('Error:', error);
+    }
+  }
+
+  async function handleUpdateCarDetails(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingCar) return;
+    setUpdatingCar(true);
+
+    try {
+      const { error } = await supabase
+        .from('cars')
+        .update({
+          brand: editingCar.brand,
+          model: editingCar.model,
+          year: editingCar.year,
+          price: editingCar.price,
+          mileage: editingCar.mileage,
+          fuel_type: editingCar.fuel_type,
+          transmission: editingCar.transmission,
+          engine_volume: editingCar.engine_volume || null,
+          drive_type: editingCar.drive_type,
+          description: editingCar.description,
+          location: editingCar.location,
+        })
+        .eq('id', editingCar.id);
+
+      if (error) throw error;
+
+      alert('Данные автомобиля успешно обновлены!');
+      setEditingCar(null);
+      fetchCars();
+    } catch (error) {
+      console.error('Error updating car:', error);
+      alert('Ошибка при обновлении данных');
+    } finally {
+      setUpdatingCar(false);
     }
   }
 
@@ -810,15 +849,23 @@ export default function AdminPage() {
                               </Button>
                             </div>
 
-                            <Button
-                              onClick={() => handleDeleteCar(car.id)}
-                              size="sm"
-                              variant="destructive"
-                              className="ml-auto"
-                            >
-                              <Trash2 className="w-4 h-4 mr-1" />
-                              Удалить
-                            </Button>
+                            <div className="flex gap-2 ml-auto">
+                              <Button
+                                onClick={() => setEditingCar({ ...car })}
+                                size="sm"
+                                variant="outline"
+                              >
+                                Редактировать
+                              </Button>
+                              <Button
+                                onClick={() => handleDeleteCar(car.id)}
+                                size="sm"
+                                variant="destructive"
+                              >
+                                <Trash2 className="w-4 h-4 mr-1" />
+                                Удалить
+                              </Button>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -826,6 +873,97 @@ export default function AdminPage() {
                   ))}
                 </div>
               )}
+              {/* Edit Car Dialog */}
+              <Dialog open={!!editingCar} onOpenChange={(open) => !open && setEditingCar(null)}>
+                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle>Редактирование автомобиля</DialogTitle>
+                  </DialogHeader>
+                  
+                  {editingCar && (
+                    <form onSubmit={handleUpdateCarDetails} className="space-y-6 mt-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium mb-1">Марка</label>
+                          <Input value={editingCar.brand} onChange={(e) => setEditingCar({...editingCar, brand: e.target.value})} required />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium mb-1">Модель</label>
+                          <Input value={editingCar.model} onChange={(e) => setEditingCar({...editingCar, model: e.target.value})} required />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium mb-1">Год</label>
+                          <Input type="number" value={editingCar.year} onChange={(e) => setEditingCar({...editingCar, year: parseInt(e.target.value)})} required />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium mb-1">Цена (₽)</label>
+                          <Input type="number" value={editingCar.price} onChange={(e) => setEditingCar({...editingCar, price: parseFloat(e.target.value)})} required />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium mb-1">Пробег (км)</label>
+                          <Input type="number" value={editingCar.mileage} onChange={(e) => setEditingCar({...editingCar, mileage: parseInt(e.target.value)})} required />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium mb-1">Тип топлива</label>
+                          <Select value={editingCar.fuel_type} onValueChange={(val) => setEditingCar({...editingCar, fuel_type: val})}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Бензин">Бензин</SelectItem>
+                              <SelectItem value="Дизель">Дизель</SelectItem>
+                              <SelectItem value="Гибрид">Гибрид</SelectItem>
+                              <SelectItem value="Электро">Электро</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium mb-1">КПП</label>
+                          <Select value={editingCar.transmission} onValueChange={(val) => setEditingCar({...editingCar, transmission: val})}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Автомат">Автомат</SelectItem>
+                              <SelectItem value="Механика">Механика</SelectItem>
+                              <SelectItem value="Робот">Робот</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium mb-1">Объем (л)</label>
+                          <Input type="number" step="0.1" value={editingCar.engine_volume || ''} onChange={(e) => setEditingCar({...editingCar, engine_volume: e.target.value ? parseFloat(e.target.value) : undefined})} />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium mb-1">Привод</label>
+                          <Select value={editingCar.drive_type || 'Полный'} onValueChange={(val) => setEditingCar({...editingCar, drive_type: val})}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Передний">Передний</SelectItem>
+                              <SelectItem value="Задний">Задний</SelectItem>
+                              <SelectItem value="Полный">Полный</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium mb-1">Описание</label>
+                        <textarea 
+                          value={editingCar.description} 
+                          onChange={(e) => setEditingCar({...editingCar, description: e.target.value})}
+                          className="w-full px-3 py-2 border rounded-md"
+                          rows={4}
+                          required
+                        />
+                      </div>
+
+                      <div className="flex justify-end gap-2">
+                        <Button type="button" variant="outline" onClick={() => setEditingCar(null)}>Отмена</Button>
+                        <Button type="submit" disabled={updatingCar}>
+                          {updatingCar ? 'Сохранение...' : 'Сохранить изменения'}
+                        </Button>
+                      </div>
+                    </form>
+                  )}
+                </DialogContent>
+              </Dialog>
             </div>
           </TabsContent>
 
