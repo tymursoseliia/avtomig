@@ -97,6 +97,16 @@ export function parseCarPost(text: string): ParsedCarDetails | null {
     fuel_type = 'Гибрид';
   }
 
+  // 8. Validation - Only accept if it looks like a car ad
+  const isCarAd = 
+    price > 0 || 
+    mileage > 0 || 
+    (brand !== "Неизвестно" && /год|пробег|цена|литр/i.test(text));
+
+  if (!isCarAd) {
+    return null;
+  }
+
   return {
     brand,
     model: model || 'Автомобиль',
