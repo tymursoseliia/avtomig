@@ -46,7 +46,7 @@ export default function TeamPage() {
     {
       name: 'Виктор Ушаков',
       role: 'Менеджер',
-      image: '/team/ushakov.jpg'
+      image: '/team/ushakov.png'
     },
     {
       name: 'Андрей Коваленко',
