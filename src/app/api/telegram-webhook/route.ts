@@ -4,12 +4,43 @@ import { supabase as defaultSupabase } from "@/lib/supabase";
 import { createClient } from "@supabase/supabase-js";
 
 // Get telegram token from env
-const BOT_TOKEN = process.env.PARSER_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN;
+const BOT_TOKEN = process.env.TELEGRAM_PARSER_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN;
+const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 
 // Create admin client if possible
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const supabaseClient = supabaseServiceKey ? createClient(supabaseUrl, supabaseServiceKey) : defaultSupabase;
+
+async function sendDebugToAdmin(message: string) {
+  if (!BOT_TOKEN || !CHAT_ID) return;
+  try {
+    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: CHAT_ID, text: message }),
+    });
+  } catch (e) {
+    console.error("Debug send error", e);
+  }
+}
+
+// Этап 1: Регистрация вебхука
+export async function GET(req: Request) {
+  const { searchParams } = new URL(req.url);
+  if (searchParams.get('setup') === 'true') {
+    if (!BOT_TOKEN) return NextResponse.json({ error: "No token" }, { status: 500 });
+    
+    const host = req.headers.get('host');
+    const protocol = host?.includes('localhost') ? 'http' : 'https';
+    const WEBHOOK_URL = `${protocol}://${host}/api/telegram-webhook`;
+    
+    const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/setWebhook?url=${WEBHOOK_URL}`);
+    const data = await response.json();
+    return NextResponse.json({ setup: true, webhook_url: WEBHOOK_URL, telegram_response: data });
+  }
+  return NextResponse.json({ status: "ok" });
+}
 
 export async function POST(req: Request) {
   try {
@@ -20,48 +51,61 @@ export async function POST(req: Request) {
 
     const body = await req.json();
 
-    // We only care about channel posts
-    const post = body.channel_post;
-    if (!post) {
+    // Этап 2: Фильтрация мусора и каналов
+    const channelPost = body.channel_post || body.edited_channel_post || body.message;
+    if (!channelPost) {
       return NextResponse.json({ status: "ignored - not a channel post" });
     }
 
+    const chatUsername = channelPost.chat?.username?.toLowerCase();
+    const forwardUsername = channelPost.forward_origin?.chat?.username?.toLowerCase();
+    
+    const targetChannelsStr = (process.env.TELEGRAM_CHANNEL_USERNAME || 'avtomig').toLowerCase();
+    const targetChannels = targetChannelsStr.split(/[\s,]+/).map(c => c.trim().replace('https://t.me/', '').replace('@', '').replace('/', ''));
+    
+    // We allow either if it matched any of our target channels, or if no target channel is defined (to avoid breaking)
+    const isFromOurChannel = 
+      (chatUsername && targetChannels.includes(chatUsername)) || 
+      (forwardUsername && targetChannels.includes(forwardUsername)) || 
+      !process.env.TELEGRAM_CHANNEL_USERNAME;
+    
+    if (!isFromOurChannel) {
+      return NextResponse.json({ status: 'ignored' });
+    }
+
     // Try to get text/caption
-    const text = post.text || post.caption;
+    const text = channelPost.text || channelPost.caption;
     if (!text) {
       return NextResponse.json({ status: "ignored - no text" });
     }
 
-    // Parse the car details
+    // Этап 3: Парсинг текста
     const parsedData = parseCarPost(text);
-    if (!parsedData) {
+    if (!parsedData || !parsedData.price || !parsedData.year) {
+      await sendDebugToAdmin(`Я пропустил этот пост, потому что не нашел цену или год (или это не авто).\n\nТекст:\n${text.substring(0, 500)}...`);
       return NextResponse.json({ status: "ignored - could not parse car details" });
     }
 
     let imageUrl = null;
 
-    // Check if there is a photo
-    if (post.photo && Array.isArray(post.photo) && post.photo.length > 0) {
-      // Telegram sends multiple sizes. The last one is the largest.
-      const largestPhoto = post.photo[post.photo.length - 1];
+    // Этап 4: Выкачивание фотографии навсегда
+    if (channelPost.photo && Array.isArray(channelPost.photo) && channelPost.photo.length > 0) {
+      const largestPhoto = channelPost.photo[channelPost.photo.length - 1];
       const fileId = largestPhoto.file_id;
 
       try {
-        // 1. Get file path
         const fileRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${fileId}`);
         const fileData = await fileRes.json();
         
         if (fileData.ok && fileData.result.file_path) {
           const filePath = fileData.result.file_path;
-          
-          // 2. Download the actual file
           const downloadUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${filePath}`;
           const imageRes = await fetch(downloadUrl);
           
           if (imageRes.ok) {
             const imageBuffer = await imageRes.arrayBuffer();
             
-            // 3. Upload to Supabase Storage
+            // Upload to Supabase Storage
             const filename = `${Date.now()}-${fileId}.jpg`;
             const { error: uploadError } = await supabaseClient.storage
               .from('car-images')
@@ -73,7 +117,6 @@ export async function POST(req: Request) {
             if (uploadError) {
               console.error("Storage upload error:", uploadError);
             } else {
-              // 4. Get public URL
               const { data: publicUrlData } = supabaseClient.storage
                 .from('car-images')
                 .getPublicUrl(filename);
@@ -84,11 +127,10 @@ export async function POST(req: Request) {
         }
       } catch (err) {
         console.error("Error processing photo:", err);
-        // Continue even if photo fails, we can still insert the car
       }
     }
 
-    // Insert into Supabase cars table
+    // Этап 5: Запись в БД
     const { error: insertError } = await supabaseClient
       .from('cars')
       .insert([
@@ -103,12 +145,13 @@ export async function POST(req: Request) {
           description: parsedData.description,
           images: imageUrl ? [imageUrl] : [],
           status: 'available',
-          location: 'Под заказ из Европы' // Default location
+          location: 'Под заказ из Европы'
         }
       ]);
 
     if (insertError) {
       console.error("Supabase insert error:", insertError);
+      await sendDebugToAdmin(`Ошибка записи в БД:\n${insertError.message}`);
       return NextResponse.json({ error: "Database error" }, { status: 500 });
     }
 
@@ -116,6 +159,7 @@ export async function POST(req: Request) {
     
   } catch (err: any) {
     console.error("Webhook processing error:", err);
+    await sendDebugToAdmin(`Фатальная ошибка вебхука:\n${err.message}`);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

@@ -31,24 +31,39 @@ export function parseCarPost(text: string): ParsedCarDetails | null {
   const year = yearMatch ? parseInt(yearMatch[1], 10) : new Date().getFullYear();
 
   // 3. Price
-  const cleanText = text.replace(/[\s,.'`_]/g, '');
-  const priceMatch = cleanText.match(/(?:цена|price)?:?(\d{3,8})(?:\$|€|₽|р|руб|usd|eur|eur|дол|евр)/i);
+  const priceRegex = /(?:Цена|Ціна)[^\d]*([\d\s,.]+)/i;
+  const priceMatchText = text.match(priceRegex);
   let price = 0;
-  if (priceMatch) {
-    price = parseInt(priceMatch[1], 10);
+  if (priceMatchText) {
+    price = parseInt(priceMatchText[1].replace(/[^\d]/g, ''), 10);
   } else {
-    // Just looking for any large logical numbers that might be price
-    const fallbackPriceMatch = text.replace(/\s/g, '').match(/\b(\d{5,8})\b/);
-    if (fallbackPriceMatch) price = parseInt(fallbackPriceMatch[1], 10);
+    const cleanText = text.replace(/[\s,.'`_]/g, '');
+    const fallbackPriceMatch = cleanText.match(/(?:цена|price)?:?(\d{3,8})(?:\$|€|₽|р|руб|usd|eur|eur|дол|евр)/i);
+    if (fallbackPriceMatch) {
+      price = parseInt(fallbackPriceMatch[1], 10);
+    } else {
+      const veryFallbackMatch = text.replace(/\s/g, '').match(/\b(\d{5,8})\b/);
+      if (veryFallbackMatch) price = parseInt(veryFallbackMatch[1], 10);
+    }
   }
 
   // 4. Mileage
-  const mileageMatch = cleanText.match(/(?:пробег|mileage)?:?(\d{1,6})(?:км|km|тыс)/i);
+  const mileageRegex = /(?:Пробег|Mileage)[^\d]*([\d\s,.]+)/i;
+  const mileageMatchText = text.match(mileageRegex);
   let mileage = 0;
-  if (mileageMatch) {
-    mileage = parseInt(mileageMatch[1], 10);
-    if (cleanText.toLowerCase().includes('тыс') && mileage < 1000) {
+  if (mileageMatchText) {
+    mileage = parseInt(mileageMatchText[1].replace(/[^\d]/g, ''), 10);
+    if (text.toLowerCase().includes('тыс') && mileage < 1000) {
       mileage = mileage * 1000;
+    }
+  } else {
+    const cleanText = text.replace(/[\s,.'`_]/g, '');
+    const fallbackMileageMatch = cleanText.match(/(?:пробег|mileage)?:?(\d{1,6})(?:км|km|тыс)/i);
+    if (fallbackMileageMatch) {
+      mileage = parseInt(fallbackMileageMatch[1], 10);
+      if (cleanText.toLowerCase().includes('тыс') && mileage < 1000) {
+        mileage = mileage * 1000;
+      }
     }
   }
 
