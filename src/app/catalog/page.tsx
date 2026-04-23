@@ -186,7 +186,7 @@ export default function CatalogPage() {
                       {car.price.toLocaleString()} ₽
                     </div>
                     <a
-                      href="https://t.me/automigsupport"
+                      href="https://t.me/pavelmotorseu"
                       target="_blank"
                       rel="noopener noreferrer"
                     >

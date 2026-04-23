@@ -34,7 +34,7 @@ export default function Header() {
         {/* Desktop Contact Buttons & Mobile Toggle */}
         <div className="flex items-center gap-3 relative z-50">
           <a
-            href="https://t.me/automigsupport"
+            href="https://t.me/pavelmotorseu"
             target="_blank"
             rel="noopener noreferrer"
             className="hidden sm:flex w-10 h-10 bg-[#0088cc] rounded-full items-center justify-center hover:bg-[#0077b3] transition-colors"
@@ -86,7 +86,7 @@ export default function Header() {
             <span className="text-base font-bold">+7 (980) 975-14-63</span>
           </a>
           <a
-            href="https://t.me/automigsupport"
+            href="https://t.me/pavelmotorseu"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center justify-center gap-2 bg-[#0088cc] text-white px-4 py-3 rounded-full font-medium shadow-sm transition-colors"
