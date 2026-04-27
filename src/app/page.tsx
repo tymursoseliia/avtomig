@@ -202,7 +202,7 @@ export default function Home() {
                 Запросить образец договора
               </Button>
               <a
-                href="https://t.me/pavelmotorseu"
+                href="https://t.me/Automigsup"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="bg-[#0088cc] hover:bg-[#0077b3] text-white px-10 py-6 text-base font-semibold rounded-lg shadow-lg transition-all hover:scale-105 flex items-center justify-center gap-2 whitespace-nowrap"
@@ -630,7 +630,7 @@ export default function Home() {
 
                 <div className="flex items-start gap-2">
                   <a
-                    href="https://t.me/pavelmotorseu"
+                    href="https://t.me/Automigsup"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="w-8 h-8 bg-[#0088cc] rounded-full flex items-center justify-center flex-shrink-0 hover:bg-[#0077b3] transition-colors"
